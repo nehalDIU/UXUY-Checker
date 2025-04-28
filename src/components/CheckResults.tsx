@@ -2,6 +2,7 @@ import React from 'react';
 import { useTextChecker } from '../context/TextCheckerContext';
 import { Users, ArrowRight, Copy, AlertTriangle, CheckCircle2, XCircle, Filter } from 'lucide-react';
 import { UXUYAmount } from '../types';
+import { maskAddress } from '../utils/textAnalysis';
 
 const UXUY_AMOUNTS: UXUYAmount[] = [10, 15, 20, 30, 50];
 
@@ -126,7 +127,7 @@ const CheckResults: React.FC = () => {
                       key={`${groupIndex}-${addressIndex}`} 
                       className="flex justify-between items-center font-mono text-xs text-red-400 bg-red-500/10 rounded p-1.5"
                     >
-                      <span className="truncate mr-2">{address}</span>
+                      <span className="truncate mr-2">{maskAddress(address)}</span>
                       <span>⛔ ({duplicate.count}x)</span>
                     </div>
                   ))}
@@ -160,7 +161,7 @@ const CheckResults: React.FC = () => {
                             className={`font-mono text-xs ${duplicate ? 'text-red-400 bg-red-500/10' : 'text-gray-400 bg-white/5'} 
                                       p-1.5 rounded flex justify-between items-center`}
                           >
-                            <span className="truncate mr-2">{address}</span>
+                            <span className="truncate mr-2">{maskAddress(address)}</span>
                             {duplicate && <span>⛔ ({duplicate.count}x)</span>}
                           </div>
                         );
@@ -189,7 +190,7 @@ const CheckResults: React.FC = () => {
                       key={index} 
                       className="font-mono text-xs text-emerald-400 bg-emerald-500/10 p-1.5 rounded flex justify-between items-center"
                     >
-                      <span className="truncate mr-2">{address}</span>
+                      <span className="truncate mr-2">{maskAddress(address)}</span>
                       <span>✓</span>
                     </div>
                   ))}

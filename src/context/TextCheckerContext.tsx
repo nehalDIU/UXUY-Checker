@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { analyzeText } from '../utils/textAnalysis';
+import { analyzeText, maskAddress } from '../utils/textAnalysis';
 import { AnalysisResults, UXUYAmount } from '../types';
 
 interface TextCheckerContextType {
@@ -44,7 +44,7 @@ export const TextCheckerProvider: React.FC<{ children: ReactNode }> = ({ childre
       analysisResults.duplicates.forEach((duplicate, index) => {
         formattedResults += `\nDuplicate Group #${index + 1}:\n`;
         duplicate.addresses.forEach(address => {
-          formattedResults += `${address} ⛔\n`;
+          formattedResults += `${maskAddress(address)} ⛔\n`;
         });
       });
       formattedResults += '\n';
@@ -58,7 +58,7 @@ export const TextCheckerProvider: React.FC<{ children: ReactNode }> = ({ childre
           const isDuplicate = analysisResults.duplicates.some(dup => 
             dup.addresses.includes(address)
           );
-          formattedResults += `${address} ${isDuplicate ? '⛔' : '✓'} (${amount} UXUY)\n`;
+          formattedResults += `${maskAddress(address)} ${isDuplicate ? '⛔' : '✓'} (${amount} UXUY)\n`;
         });
       }
     });
@@ -88,7 +88,7 @@ export const TextCheckerProvider: React.FC<{ children: ReactNode }> = ({ childre
     
     // Add unique non-zero addresses to formatted results
     Array.from(uniqueAddressesWithNonZeroUXUY).forEach(address => {
-      formattedResults += `${address} ✓\n`;
+      formattedResults += `${maskAddress(address)} ✓\n`;
     });
 
     navigator.clipboard.writeText(formattedResults).then(() => {

@@ -1,10 +1,38 @@
 import { UXUYEntry, AnalysisResults, DuplicateAddressResult } from '../types';
 
-const getAddressPattern = (address: string): string => {
-  if (address.length < 10) return address;
-  const start = address.slice(0, 4);
-  const end = address.slice(-4);
-  return `${start}${end}`;
+/**
+ * Masks an Ethereum address to show only first 5 characters after 0x and last 4 characters
+ * Example: 0x588******Bb79
+ */
+export const maskAddress = (address: string): string => {
+  if (!address || address.length < 11) return address;
+  
+  // Check if address starts with 0x
+  const prefix = address.startsWith('0x') ? '0x' : '';
+  const cleanAddress = address.startsWith('0x') ? address.slice(2) : address;
+  
+  // Get first 5 and last 4 characters
+  const firstFive = cleanAddress.slice(0, 5);
+  const lastFour = cleanAddress.slice(-4);
+  
+  return `${prefix}${firstFive}******${lastFour}`;
+};
+
+/**
+ * Returns a pattern for address matching using first 5 and last 4 characters
+ * Used for address comparisons rather than display
+ */
+export const getAddressMatchPattern = (address: string): string => {
+  if (!address || address.length < 11) return address;
+  
+  // Clean the address (remove 0x prefix if exists)
+  const cleanAddress = address.startsWith('0x') ? address.slice(2) : address;
+  
+  // Get first 5 and last 4 characters
+  const firstFive = cleanAddress.slice(0, 5);
+  const lastFour = cleanAddress.slice(-4);
+  
+  return `${firstFive}${lastFour}`;
 };
 
 const findDuplicatePatterns = (addresses: string[]): DuplicateAddressResult[] => {
@@ -17,7 +45,7 @@ const findDuplicatePatterns = (addresses: string[]): DuplicateAddressResult[] =>
   // Group addresses by pattern for similar address detection
   const patternMap = new Map<string, string[]>();
   addresses.forEach(address => {
-    const pattern = getAddressPattern(address);
+    const pattern = getAddressMatchPattern(address);
     if (!patternMap.has(pattern)) {
       patternMap.set(pattern, []);
     }
@@ -55,17 +83,30 @@ const findDuplicatePatterns = (addresses: string[]): DuplicateAddressResult[] =>
 const matchAddresses = (inviteEntries: UXUYEntry[], referrerAddresses: string[]): Map<number, string[]> => {
   const amountGroups = new Map<number, string[]>();
   
-  // Create a map to count referrer occurrences
+  // Create maps to store address patterns for matching
+  const referrerPatterns = new Map<string, string>();
   const referrerCount = new Map<string, number>();
+  
+  // Process referrer addresses and store their patterns
   referrerAddresses.forEach(address => {
-    referrerCount.set(address, (referrerCount.get(address) || 0) + 1);
+    const pattern = getAddressMatchPattern(address);
+    referrerPatterns.set(pattern, address);
+    // Count by pattern instead of exact address
+    referrerCount.set(pattern, (referrerCount.get(pattern) || 0) + 1);
   });
   
   inviteEntries.forEach(entry => {
-    if (referrerCount.has(entry.address)) {
+    const entryPattern = getAddressMatchPattern(entry.address);
+    
+    // Check if any referrer address matches this pattern
+    const matchFound = referrerPatterns.has(entryPattern);
+    
+    if (matchFound) {
+      // Use the original address from entry for consistency
       if (!amountGroups.has(entry.amount)) {
         amountGroups.set(entry.amount, []);
       }
+      
       // Add the address only once
       if (!amountGroups.get(entry.amount)?.includes(entry.address)) {
         amountGroups.get(entry.amount)?.push(entry.address);
