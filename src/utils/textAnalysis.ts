@@ -19,20 +19,22 @@ export const maskAddress = (address: string): string => {
 };
 
 /**
- * Returns a pattern for address matching using first 5 and last 4 characters
+ * Returns a pattern for address matching using first 3 characters after 0x and last 4 characters
  * Used for address comparisons rather than display
  */
 export const getAddressMatchPattern = (address: string): string => {
-  if (!address || address.length < 11) return address;
+  if (!address || address.length < 9) return address; // Minimum length: 0x + 3 + 4
   
-  // Clean the address (remove 0x prefix if exists)
-  const cleanAddress = address.startsWith('0x') ? address.slice(2) : address;
+  // Get prefix and handle addresses with or without 0x
+  const hasPrefix = address.startsWith('0x');
+  const prefix = hasPrefix ? '0x' : '';
+  const cleanAddress = hasPrefix ? address.slice(2) : address;
   
-  // Get first 5 and last 4 characters
-  const firstFive = cleanAddress.slice(0, 5);
+  // Get first 3 characters after 0x and last 4 characters
+  const firstThree = cleanAddress.slice(0, 3);
   const lastFour = cleanAddress.slice(-4);
   
-  return `${firstFive}${lastFour}`;
+  return `${prefix}${firstThree}${lastFour}`;
 };
 
 const findDuplicatePatterns = (addresses: string[]): DuplicateAddressResult[] => {
