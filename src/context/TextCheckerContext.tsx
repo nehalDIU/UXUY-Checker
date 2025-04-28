@@ -62,6 +62,34 @@ export const TextCheckerProvider: React.FC<{ children: ReactNode }> = ({ childre
         });
       }
     });
+    
+    // Add Final Unique Addresses section
+    formattedResults += '\n=== Final Unique Addresses ===\n';
+    
+    // Collect all duplicate addresses
+    const duplicateAddresses = new Set<string>();
+    analysisResults.duplicates.forEach(duplicate => {
+      duplicate.addresses.forEach(address => {
+        duplicateAddresses.add(address);
+      });
+    });
+    
+    // Get unique addresses with non-zero UXUY
+    const uniqueAddressesWithNonZeroUXUY = new Set<string>();
+    Array.from(analysisResults.amountGroups.entries())
+      .filter(([amount]) => amount > 0)
+      .forEach(([amount, addresses]) => {
+        addresses.forEach(address => {
+          if (!duplicateAddresses.has(address)) {
+            uniqueAddressesWithNonZeroUXUY.add(address);
+          }
+        });
+      });
+    
+    // Add unique non-zero addresses to formatted results
+    Array.from(uniqueAddressesWithNonZeroUXUY).forEach(address => {
+      formattedResults += `${address} ✓\n`;
+    });
 
     navigator.clipboard.writeText(formattedResults).then(() => {
       alert('Results copied to clipboard!');

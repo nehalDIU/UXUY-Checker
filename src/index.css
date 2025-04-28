@@ -4,13 +4,36 @@
 
 @layer base {
   body {
-    @apply text-gray-800 font-sans antialiased bg-slate-900;
+    @apply text-white bg-[#0F172A] font-sans antialiased;
   }
 }
 
 @layer components {
-  .animate-fadeIn {
-    animation: fadeIn 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  .gradient-text {
+    @apply text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-cyan-400 to-emerald-400;
+  }
+  
+  .input-area {
+    @apply w-full p-3 rounded-lg bg-white/5 border border-white/10 
+           text-white placeholder-gray-500 
+           focus:ring-1 focus:ring-white/20 focus:border-transparent
+           hover:bg-white/[0.07]
+           transition-colors duration-200;
+  }
+
+  .card {
+    @apply rounded-lg border border-white/10 bg-white/5
+           transition-colors duration-200;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center
+           text-white bg-gradient-to-r from-indigo-500 via-cyan-500 to-emerald-500 
+           rounded-lg shadow-lg 
+           transition-all duration-200 
+           hover:opacity-90
+           focus:outline-none focus:ring-2 focus:ring-white/20
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:opacity-50;
   }
 }
 
@@ -21,30 +44,14 @@
   }
 
   .custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
+    width: 3px;
   }
 
   .custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
+    @apply bg-transparent;
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background-color: rgba(255, 255, 255, 0.1);
-    border-radius: 3px;
-  }
-
-  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(255, 255, 255, 0.2);
-  }
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+    @apply bg-white/10 rounded-full hover:bg-white/20;
   }
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTextChecker } from '../context/TextCheckerContext';
-import { Users, ArrowRight, Filter, Copy, AlertTriangle } from 'lucide-react';
+import { Users, ArrowRight, Copy, AlertTriangle, CheckCircle2, XCircle, Filter } from 'lucide-react';
 import { UXUYAmount } from '../types';
 
 const UXUY_AMOUNTS: UXUYAmount[] = [10, 15, 20, 30, 50];
@@ -10,59 +10,124 @@ const CheckResults: React.FC = () => {
 
   if (!analysisResults) return null;
 
-  const { totalReferrers, amountGroups, duplicates } = analysisResults;
+  const { amountGroups, duplicates, totalReferrers } = analysisResults;
+  
+  // Calculate total matched addresses
+  const totalMatched = Array.from(amountGroups.values())
+    .reduce((total, addresses) => total + addresses.length, 0);
+
+  // Calculate mismatched addresses
+  const totalMismatch = totalReferrers - totalMatched;
+
+  // Get unique addresses with non-zero UXUY
+  const uniqueAddressesWithNonZeroUXUY = new Set<string>();
+  const duplicateAddresses = new Set<string>();
+
+  // Collect all duplicate addresses in a set
+  duplicates.forEach(duplicate => {
+    duplicate.addresses.forEach(address => {
+      duplicateAddresses.add(address);
+    });
+  });
+
+  // Collect unique addresses with non-zero UXUY
+  Array.from(amountGroups.entries())
+    .filter(([amount]) => amount > 0)
+    .forEach(([_, addresses]) => {
+      addresses.forEach(address => {
+        if (!duplicateAddresses.has(address)) {
+          uniqueAddressesWithNonZeroUXUY.add(address);
+        }
+      });
+    });
+
+  // Convert to array for display
+  const uniqueNonZeroAddresses = Array.from(uniqueAddressesWithNonZeroUXUY);
 
   return (
-    <div className="mt-8 sm:mt-12 animate-fadeIn">
-      <div className="rounded-2xl bg-white/[0.02] backdrop-blur-xl p-4 sm:p-8 ring-1 ring-white/10 shadow-2xl">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8">
-          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold">
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400">
-              Analysis Results
-            </span>
-          </h2>
-          <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-2 sm:gap-3">
-            <div className="flex items-center gap-2 bg-slate-900/50 rounded-xl px-3 sm:px-4 py-2 ring-1 ring-white/10 w-full sm:w-auto">
-              <Filter className="h-4 w-4 text-indigo-400" />
+    <div className="space-y-3">
+      <div className="card">
+        <div className="flex flex-col gap-2 p-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold gradient-text">Analysis Results</h2>
+            <div className="flex gap-2">
               <select
                 value={selectedAmount || ''}
                 onChange={(e) => setSelectedAmount(e.target.value ? Number(e.target.value) as UXUYAmount : null)}
-                className="bg-transparent text-white text-sm focus:outline-none cursor-pointer w-full"
+                className="text-xs sm:text-sm bg-white/5 text-white rounded-lg px-2 py-1.5 border border-white/10 focus:outline-none focus:border-white/20"
               >
                 <option value="">All UXUY</option>
                 {UXUY_AMOUNTS.map((amount) => (
                   <option key={amount} value={amount}>{amount} UXUY</option>
                 ))}
               </select>
+              <button 
+                onClick={copyResults}
+                className="px-2 py-1.5 rounded-lg text-sm bg-white/5 border border-white/10 text-white hover:bg-white/10"
+                aria-label="Copy results"
+              >
+                <Copy className="w-4 h-4" />
+              </button>
             </div>
-            <button 
-              onClick={copyResults}
-              className="inline-flex items-center justify-center px-3 sm:px-4 py-2 rounded-xl text-sm font-medium bg-slate-900/50 ring-1 ring-white/10 text-white hover:bg-slate-900/70 transition duration-200 w-full sm:w-auto"
-            >
-              <Copy className="mr-2 h-4 w-4" />
-              Copy Results
-            </button>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-2 sm:space-x-2">
+            <div className="bg-indigo-500/5 border border-indigo-500/20 rounded-lg p-2 flex-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Users className="h-4 w-4 text-indigo-400" />
+                  <h3 className="text-sm font-medium text-white">Total Input</h3>
+                </div>
+                <span className="px-2 py-0.5 bg-indigo-500/20 rounded text-sm text-white font-medium">
+                  {totalReferrers}
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-2 flex-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  <h3 className="text-sm font-medium text-white">Matched</h3>
+                </div>
+                <span className="px-2 py-0.5 bg-emerald-500/20 rounded text-sm text-white font-medium">
+                  {totalMatched}
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-2 flex-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <XCircle className="h-4 w-4 text-red-400" />
+                  <h3 className="text-sm font-medium text-white">Mismatch</h3>
+                </div>
+                <span className="px-2 py-0.5 bg-red-500/20 rounded text-sm text-white font-medium">
+                  {totalMismatch}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
         {duplicates.length > 0 && (
-          <div className="bg-red-500/10 rounded-xl p-4 sm:p-6 ring-1 ring-red-500/20 mb-6 sm:mb-8">
-            <div className="flex items-center gap-2 mb-3 sm:mb-4">
-              <AlertTriangle className="h-5 w-5 text-red-400" />
-              <h3 className="text-lg sm:text-xl font-medium text-white">
-                Found {duplicates.length} duplicate group{duplicates.length > 1 ? 's' : ''}
+          <div className="border-t border-white/10 p-3">
+            <div className="flex items-center gap-1.5 text-red-400 mb-2">
+              <AlertTriangle className="w-4 h-4" />
+              <h3 className="text-sm font-medium">
+                Duplicates Found
               </h3>
             </div>
-            <div className="font-mono space-y-2 text-sm">
+            <div className="space-y-1.5">
               {duplicates.map((duplicate, groupIndex) => (
                 <div key={groupIndex} className="space-y-1">
                   {duplicate.addresses.map((address, addressIndex) => (
                     <div 
                       key={`${groupIndex}-${addressIndex}`} 
-                      className="flex justify-between items-center text-red-400 bg-red-500/5 p-2 rounded-lg break-all"
+                      className="flex justify-between items-center font-mono text-xs text-red-400 bg-red-500/10 rounded p-1.5"
                     >
-                      <span className="mr-2">{address}</span>
-                      <span className="flex-shrink-0">⛔</span>
+                      <span className="truncate mr-2">{address}</span>
+                      <span>⛔ ({duplicate.count}x)</span>
                     </div>
                   ))}
                 </div>
@@ -71,47 +136,67 @@ const CheckResults: React.FC = () => {
           </div>
         )}
 
-        <div className="bg-slate-900/50 rounded-xl p-4 sm:p-6 ring-1 ring-white/10 mb-6 sm:mb-8">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <h3 className="text-lg sm:text-xl font-medium text-white flex items-center gap-3">
-              <Users className="h-6 w-6 text-indigo-400" />
-              Total Unique Referrers
-            </h3>
-            <span className="px-4 sm:px-6 py-1.5 sm:py-2 bg-gradient-to-r from-blue-500/20 to-indigo-500/20 rounded-full text-white font-bold text-base sm:text-lg w-full sm:w-auto text-center">
-              {totalReferrers}
-            </span>
+        <div className="border-t border-white/10 p-3">
+          <div className="space-y-3">
+            {Array.from(amountGroups.entries())
+              .filter(([amount]) => !selectedAmount || amount === selectedAmount)
+              .map(([amount, addresses]) => (
+                <div key={amount} className="bg-cyan-500/5 border border-cyan-500/20 rounded-lg p-2">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <ArrowRight className="w-4 h-4 text-cyan-400" />
+                    <h3 className="text-sm font-medium text-white">
+                      {amount} UXUY • {addresses.length}
+                    </h3>
+                  </div>
+                  <div className="max-h-[150px] overflow-y-auto custom-scrollbar">
+                    <div className="space-y-1">
+                      {addresses.map((address, index) => {
+                        const duplicate = duplicates.find(dup => 
+                          dup.addresses.includes(address)
+                        );
+                        return (
+                          <div 
+                            key={index} 
+                            className={`font-mono text-xs ${duplicate ? 'text-red-400 bg-red-500/10' : 'text-gray-400 bg-white/5'} 
+                                      p-1.5 rounded flex justify-between items-center`}
+                          >
+                            <span className="truncate mr-2">{address}</span>
+                            {duplicate && <span>⛔ ({duplicate.count}x)</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              ))}
           </div>
         </div>
 
-        <div className="space-y-4 sm:space-y-6">
-          {Array.from(amountGroups.entries())
-            .filter(([amount]) => !selectedAmount || amount === selectedAmount)
-            .map(([amount, addresses]) => (
-              <div key={amount} className="bg-slate-900/50 rounded-xl p-4 sm:p-6 ring-1 ring-white/10">
-                <h3 className="text-base sm:text-lg font-medium text-white mb-3 sm:mb-4 flex items-center gap-2">
-                  <ArrowRight className="h-5 w-5 text-indigo-400" />
-                  {amount} UXUY Group • {addresses.length} Addresses
+        {/* Final Unique Addresses Section */}
+        <div className="border-t border-white/10 p-3">
+          <div className="space-y-3">
+            <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-2">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <Filter className="w-4 h-4 text-emerald-400" />
+                <h3 className="text-sm font-medium text-white">
+                  Final Unique Addresses • {uniqueNonZeroAddresses.length}
                 </h3>
-                <div className="bg-slate-900/80 p-3 sm:p-4 rounded-xl max-h-[240px] overflow-y-auto custom-scrollbar">
-                  <div className="grid grid-cols-1 gap-2">
-                    {addresses.map((address, index) => {
-                      const isDuplicate = duplicates.some(dup => 
-                        dup.addresses.includes(address)
-                      );
-                      return (
-                        <div 
-                          key={index} 
-                          className={`font-mono text-xs sm:text-sm ${isDuplicate ? 'text-red-400' : 'text-gray-400'} py-2 px-3 rounded bg-white/5 flex justify-between items-center break-all`}
-                        >
-                          <span className="mr-2">{address}</span>
-                          {isDuplicate && <span className="flex-shrink-0">⛔</span>}
-                        </div>
-                      );
-                    })}
-                  </div>
+              </div>
+              <div className="max-h-[150px] overflow-y-auto custom-scrollbar">
+                <div className="space-y-1">
+                  {uniqueNonZeroAddresses.map((address, index) => (
+                    <div 
+                      key={index} 
+                      className="font-mono text-xs text-emerald-400 bg-emerald-500/10 p-1.5 rounded flex justify-between items-center"
+                    >
+                      <span className="truncate mr-2">{address}</span>
+                      <span>✓</span>
+                    </div>
+                  ))}
                 </div>
               </div>
-            ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>

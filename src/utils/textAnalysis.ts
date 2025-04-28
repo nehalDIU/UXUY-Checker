@@ -8,9 +8,14 @@ const getAddressPattern = (address: string): string => {
 };
 
 const findDuplicatePatterns = (addresses: string[]): DuplicateAddressResult[] => {
+  // Count occurrences of each address
+  const addressCount = new Map<string, number>();
+  addresses.forEach(address => {
+    addressCount.set(address, (addressCount.get(address) || 0) + 1);
+  });
+
+  // Group addresses by pattern for similar address detection
   const patternMap = new Map<string, string[]>();
-  
-  // First, group addresses by their pattern
   addresses.forEach(address => {
     const pattern = getAddressPattern(address);
     if (!patternMap.has(pattern)) {
@@ -19,35 +24,73 @@ const findDuplicatePatterns = (addresses: string[]): DuplicateAddressResult[] =>
     patternMap.get(pattern)?.push(address);
   });
 
-  // Filter out groups with more than one address (duplicates)
-  return Array.from(patternMap.entries())
-    .filter(([_, addresses]) => addresses.length > 1)
-    .map(([pattern, addresses]) => ({
-      pattern,
-      addresses: [...new Set(addresses)] // Remove any duplicate addresses within the group
-    }));
+  const duplicates: DuplicateAddressResult[] = [];
+
+  // Add duplicate exact addresses (showing only one instance with count)
+  addressCount.forEach((count, address) => {
+    if (count > 1) {
+      duplicates.push({
+        pattern: address,
+        addresses: [address], // Only include one instance
+        count // Add count information
+      });
+    }
+  });
+
+  // Add similar addresses (different addresses with same pattern)
+  patternMap.forEach((addresses, pattern) => {
+    const uniqueAddresses = [...new Set(addresses)];
+    if (uniqueAddresses.length > 1) {
+      duplicates.push({
+        pattern,
+        addresses: uniqueAddresses,
+        count: uniqueAddresses.length
+      });
+    }
+  });
+
+  return duplicates;
+};
+
+const matchAddresses = (inviteEntries: UXUYEntry[], referrerAddresses: string[]): Map<number, string[]> => {
+  const amountGroups = new Map<number, string[]>();
+  
+  // Create a map to count referrer occurrences
+  const referrerCount = new Map<string, number>();
+  referrerAddresses.forEach(address => {
+    referrerCount.set(address, (referrerCount.get(address) || 0) + 1);
+  });
+  
+  inviteEntries.forEach(entry => {
+    if (referrerCount.has(entry.address)) {
+      if (!amountGroups.has(entry.amount)) {
+        amountGroups.set(entry.amount, []);
+      }
+      // Add the address only once
+      if (!amountGroups.get(entry.amount)?.includes(entry.address)) {
+        amountGroups.get(entry.amount)?.push(entry.address);
+      }
+    }
+  });
+
+  return amountGroups;
 };
 
 export const analyzeText = (inviteText: string, referrerText: string): AnalysisResults => {
   const inviteEntries = parseInviteText(inviteText);
   const referrerAddresses = parseReferrerText(referrerText);
   
-  // Combine all addresses for duplicate checking
-  const allAddresses = [...referrerAddresses, ...inviteEntries.map(entry => entry.address)];
-  const duplicates = findDuplicatePatterns(allAddresses);
+  // Match addresses and group by UXUY amount
+  const amountGroups = matchAddresses(inviteEntries, referrerAddresses);
   
-  // Group addresses by UXUY amount
-  const amountGroups = new Map<number, string[]>();
-  
-  inviteEntries.forEach(entry => {
-    if (!amountGroups.has(entry.amount)) {
-      amountGroups.set(entry.amount, []);
-    }
-    amountGroups.get(entry.amount)?.push(entry.address);
-  });
+  // Find duplicates among all referrer addresses
+  const duplicates = findDuplicatePatterns(referrerAddresses);
+
+  // Calculate total input (all addresses including duplicates)
+  const totalReferrers = referrerAddresses.length;
 
   return {
-    totalReferrers: referrerAddresses.length,
+    totalReferrers,
     amountGroups,
     duplicates
   };
@@ -60,9 +103,10 @@ const parseInviteText = (text: string): UXUYEntry[] => {
     .filter(line => line.trim())
     .map(line => {
       const [address, amountStr] = line.trim().split(/\s+/);
+      const amount = parseInt(amountStr?.replace('UXUY', '').trim()) || 0;
       return {
         address: address.trim(),
-        amount: parseInt(amountStr) || 0
+        amount
       };
     });
 };

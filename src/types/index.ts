@@ -17,6 +17,7 @@ export interface AnalysisResults {
 export interface DuplicateAddressResult {
   addresses: string[];
   pattern: string;
+  count: number;
 }
 
 export type UXUYAmount = 10 | 15 | 20 | 30 | 50;

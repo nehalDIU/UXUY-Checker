@@ -1,20 +1,14 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { resolve } from 'path';
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  optimizeDeps: {
-    exclude: ['lucide-react'],
+  resolve: {
+    alias: {
+      // Alias to our custom icons to prevent ad blocker interference
+      'lucide-react/dist/esm/icons/fingerprint.js': resolve(__dirname, './src/components/icons/CustomIcons.tsx'),
+    },
   },
-  server: {
-    proxy: {
-      // Rename the path to avoid ad blocker detection
-      '/icon-assets': {
-        target: 'http://localhost:5175/node_modules/lucide-react/dist/esm/icons',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/icon-assets/, '')
-      }
-    }
-  }
 });
