@@ -34,8 +34,8 @@ const CheckResults: React.FC = () => {
   Array.from(amountGroups.entries()).forEach(([_, addresses]) => {
     addresses.forEach(address => {
       if (exactDuplicateAddresses.has(address)) {
-        // Count exact duplicates multiple times
-        totalMatched += exactDuplicateAddresses.get(address) || 1;
+        // Count exact duplicates only once (changed from multiple times)
+        totalMatched += 1;
       } else {
         // Count non-duplicates once
         totalMatched += 1;
@@ -43,8 +43,30 @@ const CheckResults: React.FC = () => {
     });
   });
   
-  // Calculate mismatched addresses - this should be totalReferrers minus total matched
-  const totalMismatch = totalReferrers - totalMatched;
+  // Get all duplicate patters for similar addresses detection
+  const patternDuplicates = new Set<string>();
+  duplicates.forEach(duplicate => {
+    if (duplicate.addresses.length > 1) {
+      patternDuplicates.add(duplicate.pattern);
+    }
+  });
+
+  // Calculate total unique referrer addresses (excluding duplicates)
+  let uniqueReferrersCount = totalReferrers;
+  
+  // Subtract duplicate occurrences from total count
+  duplicates.forEach(duplicate => {
+    if (duplicate.addresses.length === 1) {
+      // For exact duplicates, subtract (count - 1) to keep only one occurrence
+      uniqueReferrersCount -= (duplicate.count - 1);
+    } else {
+      // For different format addresses with same pattern, subtract (count - 1) to keep only one occurrence
+      uniqueReferrersCount -= (duplicate.addresses.length - 1);
+    }
+  });
+  
+  // Calculate mismatched addresses - use uniqueReferrersCount instead of totalReferrers
+  const totalMismatch = uniqueReferrersCount - totalMatched;
 
   // Get unique addresses with non-zero UXUY
   const uniqueAddressesWithNonZeroUXUY = new Set<string>();
@@ -56,7 +78,7 @@ const CheckResults: React.FC = () => {
       duplicateAddresses.add(address);
     });
   });
-
+  
   // Collect unique addresses with non-zero UXUY
   Array.from(amountGroups.entries())
     .filter(([amount]) => amount > 0)
@@ -140,9 +162,15 @@ const CheckResults: React.FC = () => {
                   <Users className="h-4 w-4 text-indigo-400" />
                   <h3 className="text-sm font-medium text-white">Total Input</h3>
                 </div>
-                <span className="px-2 py-0.5 bg-indigo-500/20 rounded text-sm text-white font-medium">
-                  {totalReferrers}
-                </span>
+                <div className="flex items-center gap-1">
+                  <span className="px-2 py-0.5 bg-indigo-500/20 rounded text-sm text-white font-medium">
+                    {totalReferrers}
+                  </span>
+                  <span className="text-xs text-indigo-300 ml-1 flex items-center" title="Count after removing duplicates and different format addresses with same pattern">
+                    ({uniqueReferrersCount} unique)
+                    <Info className="w-3 h-3 ml-0.5 cursor-help" />
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -162,7 +190,7 @@ const CheckResults: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <XCircle className="h-4 w-4 text-red-400" />
-                  <h3 className="text-sm font-medium text-white">Mismatch</h3>
+                  <h3 className="text-sm font-medium text-white">Mismatch (No Dupes)</h3>
                 </div>
                 <span className="px-2 py-0.5 bg-red-500/20 rounded text-sm text-white font-medium">
                   {totalMismatch}
@@ -211,6 +239,7 @@ const CheckResults: React.FC = () => {
                 <ul className="list-disc pl-4 mt-1 space-y-1">
                   <li>Exact duplicates: The same address appears multiple times</li>
                   <li>Pattern matches: Different addresses that share the same first 5 and last 4 characters</li>
+                  <li>Duplicates (both exact and different formats) are not counted in the Mismatch total</li>
                 </ul>
               </div>
             )}

@@ -38,14 +38,55 @@ export const TextCheckerProvider: React.FC<{ children: ReactNode }> = ({ childre
 
     let formattedResults = '';
     
+    // Calculate totals and mismatch similar to CheckResults component
+    let totalMatched = 0;
+    let uniqueReferrersCount = analysisResults.totalReferrers;
+    
+    // Find which addresses are duplicates and how many times they occur
+    const exactDuplicateAddresses = new Map<string, number>();
+    
+    // Process duplicates
+    analysisResults.duplicates.forEach(duplicate => {
+      if (duplicate.addresses.length === 1) {
+        // This is an exact duplicate (same address multiple times)
+        exactDuplicateAddresses.set(duplicate.addresses[0], duplicate.count);
+        // For exact duplicates, subtract (count - 1) to keep only one occurrence
+        uniqueReferrersCount -= (duplicate.count - 1);
+      } else {
+        // For different format addresses with same pattern, subtract (count - 1) to keep only one occurrence
+        uniqueReferrersCount -= (duplicate.addresses.length - 1);
+      }
+    });
+    
+    // Count matched addresses (only count duplicates once)
+    Array.from(analysisResults.amountGroups.entries()).forEach(([_, addresses]) => {
+      addresses.forEach(address => {
+        totalMatched += 1; // Each address counts as one match
+      });
+    });
+    
+    // Calculate mismatch
+    const totalMismatch = uniqueReferrersCount - totalMatched;
+    
+    // Add summary section
+    formattedResults += '=== Summary ===\n';
+    formattedResults += `Total Referrers: ${analysisResults.totalReferrers} (${uniqueReferrersCount} unique)\n`;
+    formattedResults += `Matched: ${totalMatched}\n`;
+    formattedResults += `Mismatch (No Dupes): ${totalMismatch}\n\n`;
+    
     // Add duplicate addresses first
     if (analysisResults.duplicates.length > 0) {
       formattedResults += '=== Duplicate Addresses ===\n';
       analysisResults.duplicates.forEach((duplicate, index) => {
         formattedResults += `\nDuplicate Group #${index + 1}:\n`;
-        duplicate.addresses.forEach(address => {
-          formattedResults += `${maskAddress(address)} ⛔\n`;
-        });
+        if (duplicate.addresses.length > 1) {
+          formattedResults += `Pattern match (first 5 + last 4): ${duplicate.pattern}\n`;
+          duplicate.addresses.forEach(address => {
+            formattedResults += `${maskAddress(address)} ⛔ (pattern match)\n`;
+          });
+        } else {
+          formattedResults += `${maskAddress(duplicate.addresses[0])} ⛔ (${duplicate.count}x exact duplicates)\n`;
+        }
       });
       formattedResults += '\n';
     }
