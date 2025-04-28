@@ -14,9 +14,36 @@ const CheckResults: React.FC = () => {
   const { amountGroups, duplicates, totalReferrers } = analysisResults;
   
   // Calculate total matched addresses
-  const totalMatched = Array.from(amountGroups.values())
-    .reduce((total, addresses) => total + addresses.length, 0);
-
+  let totalMatched = 0;
+  
+  // For exact duplicates, we need to count them multiple times (based on their count)
+  // The duplicates array contains information about duplicate addresses
+  // Each entry in duplicates has a count field indicating how many times that address appears
+  
+  // Find which addresses are duplicates and how many times they occur
+  const exactDuplicateAddresses = new Map<string, number>();
+  
+  // First, extract exact duplicates (where the pattern is the address itself)
+  duplicates.forEach(duplicate => {
+    if (duplicate.addresses.length === 1) {
+      // This is an exact duplicate (same address multiple times)
+      exactDuplicateAddresses.set(duplicate.addresses[0], duplicate.count);
+    }
+  });
+  
+  // Count all addresses in amount groups, with special handling for duplicates
+  Array.from(amountGroups.entries()).forEach(([_, addresses]) => {
+    addresses.forEach(address => {
+      if (exactDuplicateAddresses.has(address)) {
+        // Count exact duplicates multiple times
+        totalMatched += exactDuplicateAddresses.get(address) || 1;
+      } else {
+        // Count non-duplicates once
+        totalMatched += 1;
+      }
+    });
+  });
+  
   // Calculate mismatched addresses
   const totalMismatch = totalReferrers - totalMatched;
 
