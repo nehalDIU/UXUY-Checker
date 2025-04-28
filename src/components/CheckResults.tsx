@@ -231,30 +231,29 @@ const CheckResults: React.FC = () => {
 
                 <div className="space-y-1.5">
                   {filteredDuplicates.map((duplicate, groupIndex) => (
-                    <div key={groupIndex} className="space-y-1">
-                      {duplicate.addresses.map((address, addressIndex) => (
-                        <div 
-                          key={`${groupIndex}-${addressIndex}`} 
-                          className="flex justify-between items-center font-mono text-xs text-red-400 bg-red-500/10 rounded p-1.5"
-                        >
-                          <span className="truncate mr-2">{address}</span>
-                          {duplicate.addresses.length > 1 ? (
-                            <span className="flex items-center">
-                              <span className="text-xs bg-red-500/20 px-1.5 py-0.5 rounded-full mr-1">
-                                First5+Last4 Match ({duplicate.addresses.length}x)
-                              </span>
-                              <span>⛔</span>
-                            </span>
-                          ) : (
-                            <span className="flex items-center">
-                              <span className="text-xs bg-orange-500/20 px-1.5 py-0.5 rounded-full mr-1">
-                                Exact ({duplicate.count}x)
-                              </span>
-                              <span>⛔</span>
-                            </span>
-                          )}
-                        </div>
-                      ))}
+                    <div 
+                      key={groupIndex} 
+                      className="flex justify-between items-center font-mono text-xs text-red-400 bg-red-500/10 rounded p-1.5"
+                    >
+                      <div className="flex flex-col">
+                        <span className="truncate mr-2 font-semibold">{duplicate.addresses[0]}</span>
+                        <span className="text-xs text-red-300 mt-0.5">
+                          {duplicate.addresses.length > 1 
+                            ? `${duplicate.addresses.length} different address formats with same pattern` 
+                            : `Exact duplicate appeared ${duplicate.count} times`}
+                        </span>
+                      </div>
+                      <div className="flex items-center">
+                        {duplicate.addresses.length > 1 ? (
+                          <span className="text-xs bg-red-500/20 px-1.5 py-0.5 rounded-full mr-1">
+                            Pattern ({duplicate.addresses.length}x)
+                          </span>
+                        ) : (
+                          <span className="text-xs bg-orange-500/20 px-1.5 py-0.5 rounded-full mr-1">
+                            Exact ({duplicate.count}x)
+                          </span>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
