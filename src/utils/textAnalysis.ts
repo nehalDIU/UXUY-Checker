@@ -7,9 +7,13 @@ import { UXUYEntry, AnalysisResults, DuplicateAddressResult } from '../types';
 export const maskAddress = (address: string): string => {
   if (!address || address.length < 11) return address;
   
+  // We don't fully normalize here since we want to preserve case for display
+  // but we do trim and handle 0x prefix consistently
+  let cleanedAddress = address.trim();
+  
   // Check if address starts with 0x
-  const prefix = address.startsWith('0x') ? '0x' : '';
-  const cleanAddress = address.startsWith('0x') ? address.slice(2) : address;
+  const prefix = cleanedAddress.startsWith('0x') ? '0x' : '';
+  const cleanAddress = cleanedAddress.startsWith('0x') ? cleanedAddress.slice(2) : cleanedAddress;
   
   // Get first 5 and last 4 characters
   const firstFive = cleanAddress.slice(0, 5);
@@ -19,57 +23,88 @@ export const maskAddress = (address: string): string => {
 };
 
 /**
- * Returns a pattern for address matching using first 3 characters after 0x and last 4 characters
+ * Normalizes an Ethereum address:
+ * - Removes whitespace
+ * - Converts to lowercase
+ * - Ensures consistent 0x prefix
+ */
+export const normalizeAddress = (address: string): string => {
+  if (!address) return address;
+  
+  let normalized = address.trim().toLowerCase();
+  
+  // Add 0x prefix if missing but only if it's an Ethereum address
+  if (!normalized.startsWith('0x') && /^[0-9a-f]{40}$/i.test(normalized)) {
+    normalized = '0x' + normalized;
+  }
+  
+  return normalized;
+};
+
+/**
+ * Returns a pattern for address matching using first 5 characters after 0x and last 4 characters
  * Used for address comparisons rather than display
  */
 export const getAddressMatchPattern = (address: string): string => {
-  if (!address || address.length < 9) return address; // Minimum length: 0x + 3 + 4
+  // First normalize the address
+  const normalized = normalizeAddress(address);
+  
+  if (!normalized || normalized.length < 11) return normalized; // Minimum length: 0x + 5 + 4
   
   // Get prefix and handle addresses with or without 0x
-  const hasPrefix = address.startsWith('0x');
+  const hasPrefix = normalized.startsWith('0x');
   const prefix = hasPrefix ? '0x' : '';
-  const cleanAddress = hasPrefix ? address.slice(2) : address;
+  const cleanAddress = hasPrefix ? normalized.slice(2) : normalized;
   
-  // Get first 3 characters after 0x and last 4 characters
-  const firstThree = cleanAddress.slice(0, 3);
+  // Get first 5 characters after 0x and last 4 characters
+  const firstFive = cleanAddress.slice(0, 5);
   const lastFour = cleanAddress.slice(-4);
   
-  return `${prefix}${firstThree}${lastFour}`;
+  return `${prefix}${firstFive}${lastFour}`;
 };
 
 const findDuplicatePatterns = (addresses: string[]): DuplicateAddressResult[] => {
-  // Count occurrences of each address
+  // First, normalize all addresses
+  const normalizedAddresses = addresses.map(normalizeAddress);
+  
+  // Count occurrences of each normalized address
   const addressCount = new Map<string, number>();
-  addresses.forEach(address => {
+  normalizedAddresses.forEach(address => {
     addressCount.set(address, (addressCount.get(address) || 0) + 1);
   });
 
   // Group addresses by pattern for similar address detection
   const patternMap = new Map<string, string[]>();
-  addresses.forEach(address => {
+  normalizedAddresses.forEach((address, i) => {
     const pattern = getAddressMatchPattern(address);
     if (!patternMap.has(pattern)) {
       patternMap.set(pattern, []);
     }
-    patternMap.get(pattern)?.push(address);
+    // Use original address for display
+    patternMap.get(pattern)?.push(addresses[i]);
   });
 
   const duplicates: DuplicateAddressResult[] = [];
 
   // Add duplicate exact addresses (showing only one instance with count)
-  addressCount.forEach((count, address) => {
+  addressCount.forEach((count, normalizedAddress) => {
     if (count > 1) {
+      // Find original addresses that normalize to this value
+      const originalAddresses = normalizedAddresses
+        .map((addr, i) => addr === normalizedAddress ? addresses[i] : null)
+        .filter(Boolean) as string[];
+      
       duplicates.push({
-        pattern: address,
-        addresses: [address], // Only include one instance
+        pattern: normalizedAddress,
+        addresses: [originalAddresses[0]], // Only include one instance
         count // Add count information
       });
     }
   });
 
   // Add similar addresses (different addresses with same pattern)
-  patternMap.forEach((addresses, pattern) => {
-    const uniqueAddresses = [...new Set(addresses)];
+  patternMap.forEach((addrs, pattern) => {
+    const uniqueAddresses = [...new Set(addrs)];
     if (uniqueAddresses.length > 1) {
       duplicates.push({
         pattern,
@@ -89,16 +124,21 @@ const matchAddresses = (inviteEntries: UXUYEntry[], referrerAddresses: string[])
   const referrerPatterns = new Map<string, string>();
   const referrerCount = new Map<string, number>();
   
+  // Normalize referrer addresses for consistent matching
+  const normalizedReferrerAddresses = referrerAddresses.map(normalizeAddress);
+  
   // Process referrer addresses and store their patterns
-  referrerAddresses.forEach(address => {
-    const pattern = getAddressMatchPattern(address);
-    referrerPatterns.set(pattern, address);
+  normalizedReferrerAddresses.forEach((normalizedAddress, i) => {
+    const pattern = getAddressMatchPattern(normalizedAddress);
+    referrerPatterns.set(pattern, referrerAddresses[i]); // Store original address
     // Count by pattern instead of exact address
     referrerCount.set(pattern, (referrerCount.get(pattern) || 0) + 1);
   });
   
   inviteEntries.forEach(entry => {
-    const entryPattern = getAddressMatchPattern(entry.address);
+    // Normalize the entry address before matching
+    const normalizedEntryAddress = normalizeAddress(entry.address);
+    const entryPattern = getAddressMatchPattern(normalizedEntryAddress);
     
     // Check if any referrer address matches this pattern
     const matchFound = referrerPatterns.has(entryPattern);
@@ -148,7 +188,7 @@ const parseInviteText = (text: string): UXUYEntry[] => {
       const [address, amountStr] = line.trim().split(/\s+/);
       const amount = parseInt(amountStr?.replace('UXUY', '').trim()) || 0;
       return {
-        address: address.trim(),
+        address: address ? address.trim() : '', // Don't normalize here as we want to preserve original format for display
         amount
       };
     });
@@ -159,5 +199,5 @@ const parseReferrerText = (text: string): string[] => {
     .trim()
     .split('\n')
     .filter(line => line.trim())
-    .map(line => line.trim());
+    .map(line => line.trim()); // Don't normalize here as we want to preserve original format for display
 };

@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ChevronUp, ChevronDown, ArrowUpDown, Search, ArrowLeft, ArrowRight, Download } from 'lucide-react';
 import { useTextChecker } from '../context/TextCheckerContext';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
+import { normalizeAddress } from '../utils/textAnalysis';
 
 type SortDirection = 'asc' | 'desc' | null;
 type SortableColumn = 'address' | 'value' | 'token' | 'status';
@@ -102,20 +103,16 @@ const DataTableDemo: React.FC = () => {
       const isAddressSearch = searchTermLower.startsWith('0x') || /^[a-f0-9]{4,}$/i.test(searchTermLower);
       
       result = tableData.filter(item => {
+        // Use our normalizeAddress function for address matching
+        const normalizedItemAddress = normalizeAddress(item.address);
+        const normalizedSearchTerm = normalizeAddress(searchTermLower);
+        
         // Enhanced address matching with special priority for address-like inputs
         const addressMatch = isAddressSearch ? 
           // If it looks like an address search, prioritize this match
-          item.address.toLowerCase().includes(searchTermLower) :
+          normalizedItemAddress.includes(normalizedSearchTerm) :
           // Otherwise include address in general search
-          item.address.toLowerCase().includes(searchTermLower);
-        
-        // Normalize address for comparison - handle with/without 0x prefix
-        const normalizedSearch = searchTermLower.startsWith('0x') ? 
-          searchTermLower : 
-          searchTermLower.replace(/^0x/, '');
-        
-        const normalizedAddress = item.address.toLowerCase().replace(/^0x/, '');
-        const enhancedAddressMatch = normalizedAddress.includes(normalizedSearch);
+          normalizedItemAddress.includes(normalizedSearchTerm);
         
         // Check token match (exact match)
         const tokenMatch = !isAddressSearch && 
@@ -132,7 +129,7 @@ const DataTableDemo: React.FC = () => {
         const valueMatch = !isAddressSearch && item.value.toString() === searchTermLower;
         
         // Return true if any field matches - with priority to address if it looks like an address search
-        return addressMatch || enhancedAddressMatch || tokenMatch || statusMatch || valueMatch;
+        return addressMatch || tokenMatch || statusMatch || valueMatch;
       });
     }
 

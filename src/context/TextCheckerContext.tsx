@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { analyzeText, maskAddress } from '../utils/textAnalysis';
+import { analyzeText, maskAddress, normalizeAddress } from '../utils/textAnalysis';
 import { AnalysisResults, UXUYAmount } from '../types';
 
 interface TextCheckerContextType {
@@ -55,9 +55,14 @@ export const TextCheckerProvider: React.FC<{ children: ReactNode }> = ({ childre
     analysisResults.amountGroups.forEach((addresses, amount) => {
       if (!selectedAmount || amount === selectedAmount) {
         addresses.forEach(address => {
+          // Check if this address is in any of the duplicate groups
           const isDuplicate = analysisResults.duplicates.some(dup => 
-            dup.addresses.includes(address)
+            dup.addresses.some(dupAddress => 
+              // Compare normalized addresses to ensure accurate matching
+              normalizeAddress(dupAddress) === normalizeAddress(address)
+            )
           );
+          
           formattedResults += `${maskAddress(address)} ${isDuplicate ? '⛔' : '✓'} (${amount} UXUY)\n`;
         });
       }
