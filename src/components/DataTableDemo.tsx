@@ -15,11 +15,12 @@ interface TableRow {
   token: string;
   status: 'success' | 'failure';
   isDuplicate: boolean;
+  isReferrer: boolean;
 }
 
 const DataTableDemo: React.FC = () => {
   // Get analysis results from context
-  const { analysisResults } = useTextChecker();
+  const { analysisResults, referrerText } = useTextChecker();
   
   // State for sorting, filtering and UI
   const [sortColumn, setSortColumn] = useState<SortableColumn>('address');
@@ -30,6 +31,7 @@ const DataTableDemo: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<FilterType>('all');
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [valueFilter, setValueFilter] = useState<number | null>(null);
+  const [showReferrersOnly, setShowReferrersOnly] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   
   const itemsPerPage = isMobileView ? 5 : 10;
@@ -50,12 +52,22 @@ const DataTableDemo: React.FC = () => {
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
+  // Parse referrer addresses from the text input
+  const parseReferrerAddresses = useMemo(() => {
+    if (!referrerText) return [];
+    return referrerText
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
+  }, [referrerText]);
+
   // Convert analysis results to table data format
   const tableData = useMemo<TableRow[]>(() => {
     if (!analysisResults) return [];
     
     const rows: TableRow[] = [];
     const duplicateAddresses = new Set<string>();
+    const processedAddresses = new Set<string>();
     
     // Collect all duplicate addresses
     analysisResults.duplicates.forEach(duplicate => {
@@ -67,19 +79,45 @@ const DataTableDemo: React.FC = () => {
     // Process all addresses from amount groups
     analysisResults.amountGroups.forEach((addresses, amount) => {
       addresses.forEach(address => {
-        const isDuplicate = duplicateAddresses.has(normalizeAddress(address));
+        const normalizedAddress = normalizeAddress(address);
+        const isDuplicate = duplicateAddresses.has(normalizedAddress);
+        
+        // Check if this address is in the referrer list
+        const isReferrer = parseReferrerAddresses.some(
+          refAddr => normalizeAddress(refAddr) === normalizedAddress
+        );
+        
         rows.push({
           address,
           value: amount,
           token: 'UXUY',
           status: isDuplicate || amount === 0 ? 'failure' : 'success',
-          isDuplicate
+          isDuplicate,
+          isReferrer
         });
+        
+        processedAddresses.add(normalizedAddress);
       });
     });
     
+    // Add any referrer addresses that weren't in the amount groups
+    parseReferrerAddresses.forEach(address => {
+      const normalizedAddress = normalizeAddress(address);
+      if (!processedAddresses.has(normalizedAddress)) {
+        const isDuplicate = duplicateAddresses.has(normalizedAddress);
+        rows.push({
+          address,
+          value: 0, // No value assigned
+          token: 'UXUY',
+          status: 'failure', // Not found in invites = failure
+          isDuplicate,
+          isReferrer: true
+        });
+      }
+    });
+    
     return rows;
-  }, [analysisResults]);
+  }, [analysisResults, parseReferrerAddresses]);
 
   // Handle column header click for sorting
   const handleSort = (column: SortableColumn) => {
@@ -96,9 +134,14 @@ const DataTableDemo: React.FC = () => {
 
   // Filter and sort data
   const filteredAndSortedData = useMemo(() => {
-    // First filter by status
+    // First filter by referrer flag if needed
     let result = tableData;
     
+    if (showReferrersOnly) {
+      result = result.filter(item => item.isReferrer);
+    }
+    
+    // Filter by status
     if (statusFilter !== 'all') {
       result = result.filter(item => item.status === statusFilter);
     }
@@ -155,7 +198,7 @@ const DataTableDemo: React.FC = () => {
     }
     
     return result;
-  }, [tableData, searchQuery, sortColumn, sortDirection, statusFilter, valueFilter]);
+  }, [tableData, searchQuery, sortColumn, sortDirection, statusFilter, valueFilter, showReferrersOnly]);
 
   // Pagination
   const paginatedData = useMemo(() => {
@@ -219,6 +262,7 @@ const DataTableDemo: React.FC = () => {
   const resetFilters = () => {
     setStatusFilter('all');
     setValueFilter(null);
+    setShowReferrersOnly(false);
     clearSearch();
     setShowFilterPanel(false);
   };
@@ -251,7 +295,8 @@ const DataTableDemo: React.FC = () => {
         Value: row.value,
         Token: row.token,
         Status: row.status.toUpperCase(),
-        Duplicate: row.isDuplicate ? "YES" : "NO"
+        Duplicate: row.isDuplicate ? "YES" : "NO",
+        Referrer: row.isReferrer ? "YES" : "NO"
       }))
     );
     
@@ -261,7 +306,8 @@ const DataTableDemo: React.FC = () => {
       { wch: 10 }, // Value column
       { wch: 10 }, // Token column
       { wch: 15 }, // Status column
-      { wch: 12 }  // Duplicate column
+      { wch: 12 }, // Duplicate column
+      { wch: 12 }  // Referrer column
     ];
     worksheet['!cols'] = columnWidths;
     
@@ -299,9 +345,16 @@ const DataTableDemo: React.FC = () => {
               <div className="font-mono text-sm text-white overflow-hidden text-ellipsis">
                 {maskAddress(row.address)}
               </div>
-              <div className={`ml-2 px-2 py-1 rounded-full text-xs font-medium
-                           ${row.status === 'success' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>
-                {row.status === 'success' ? 'VALID' : 'INVALID'}
+              <div className="flex items-center gap-1">
+                {row.isReferrer && (
+                  <span className="bg-blue-500/20 text-blue-300 text-xs px-2 py-1 rounded-full">
+                    Referrer
+                  </span>
+                )}
+                <div className={`px-2 py-1 rounded-full text-xs font-medium
+                             ${row.status === 'success' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>
+                  {row.status === 'success' ? 'VALID' : 'INVALID'}
+                </div>
               </div>
             </div>
             <div className="px-3 py-2 flex justify-between items-center">
@@ -365,12 +418,15 @@ const DataTableDemo: React.FC = () => {
               <th className="py-3 px-4 text-left font-medium whitespace-nowrap text-sm">
                 DUPLICATE
               </th>
+              <th className="py-3 px-4 text-left font-medium whitespace-nowrap text-sm">
+                REFERRER
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-700">
             {paginatedData.length === 0 ? (
               <tr>
-                <td colSpan={5} className="py-8 text-center text-gray-400 bg-gray-800">
+                <td colSpan={6} className="py-8 text-center text-gray-400 bg-gray-800">
                   No results found
                 </td>
               </tr>
@@ -409,6 +465,15 @@ const DataTableDemo: React.FC = () => {
                     {row.isDuplicate ? (
                       <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/20 text-amber-300">
                         <Info className="w-3 h-3 mr-1" />
+                        YES
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
+                  <td className="py-3 px-4 text-sm">
+                    {row.isReferrer ? (
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300">
                         YES
                       </span>
                     ) : (
@@ -504,6 +569,18 @@ const DataTableDemo: React.FC = () => {
             </div>
           </div>
           
+          <div>
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                checked={showReferrersOnly}
+                onChange={() => setShowReferrersOnly(!showReferrersOnly)}
+                className="mr-2 h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm text-gray-300">Show referrers only</span>
+            </label>
+          </div>
+          
           <div className="flex justify-end">
             <button
               onClick={resetFilters}
@@ -525,6 +602,7 @@ const DataTableDemo: React.FC = () => {
   const totalValid = tableData.filter(row => row.status === 'success').length;
   const totalInvalid = tableData.filter(row => row.status === 'failure').length;
   const totalDuplicates = tableData.filter(row => row.isDuplicate).length;
+  const totalReferrers = tableData.filter(row => row.isReferrer).length;
 
   return (
     <div className="space-y-4 mt-8">
@@ -570,7 +648,7 @@ const DataTableDemo: React.FC = () => {
             <button 
               onClick={() => setShowFilterPanel(!showFilterPanel)}
               className={`flex items-center justify-center px-3 py-2 rounded-md transition-colors ${
-                statusFilter !== 'all' || valueFilter !== null 
+                statusFilter !== 'all' || valueFilter !== null || showReferrersOnly
                   ? 'bg-indigo-600 text-white' 
                   : 'bg-gray-700 hover:bg-gray-600 text-white'
               }`}
@@ -594,13 +672,23 @@ const DataTableDemo: React.FC = () => {
         {renderFilterPanel()}
         
         {/* Summary stats - responsive grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-4">
           <div className="bg-gradient-to-br from-gray-700/50 to-gray-800/70 rounded-lg p-3 border border-gray-700 shadow-sm">
             <h3 className="text-gray-400 text-xs uppercase tracking-wider">Total Transactions</h3>
             <p className="text-2xl font-bold text-white mt-1">{tableData.length}</p>
             <div className="flex items-center mt-1">
               <span className="text-xs text-gray-400">
                 {filteredAndSortedData.length} shown
+              </span>
+            </div>
+          </div>
+          
+          <div className="bg-gradient-to-br from-blue-900/30 to-blue-800/10 rounded-lg p-3 border border-blue-900/30 shadow-sm">
+            <h3 className="text-blue-300/80 text-xs uppercase tracking-wider">Referrers</h3>
+            <p className="text-2xl font-bold text-blue-300 mt-1">{totalReferrers}</p>
+            <div className="flex items-center mt-1">
+              <span className="text-xs text-blue-300/60">
+                {Math.round((totalReferrers / tableData.length) * 100)}% of total
               </span>
             </div>
           </div>
@@ -638,7 +726,7 @@ const DataTableDemo: React.FC = () => {
       </div>
       
       {/* Active filters display */}
-      {(statusFilter !== 'all' || valueFilter !== null || searchQuery) && (
+      {(statusFilter !== 'all' || valueFilter !== null || searchQuery || showReferrersOnly) && (
         <div className="flex flex-wrap items-center gap-2 text-sm text-gray-300">
           <span className="text-gray-400">Active filters:</span>
           
@@ -659,6 +747,18 @@ const DataTableDemo: React.FC = () => {
               <span className="mr-1">Value: {valueFilter}</span>
               <button 
                 onClick={() => setValueFilter(null)}
+                className="text-gray-400 hover:text-white"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+          
+          {showReferrersOnly && (
+            <div className="bg-gray-700 rounded-full px-3 py-1 flex items-center">
+              <span className="mr-1">Referrers only</span>
+              <button 
+                onClick={() => setShowReferrersOnly(false)}
                 className="text-gray-400 hover:text-white"
               >
                 <X className="w-3 h-3" />

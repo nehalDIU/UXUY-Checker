@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import TextChecker from './components/TextChecker';
 import DataTableDemo from './components/DataTableDemo';
+import DataAnalysisReport from './components/DataAnalysisReport';
 import { TextCheckerProvider } from './context/TextCheckerContext';
 import { useFingerprint } from './context/FingerprintContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -29,6 +30,10 @@ function App() {
               </p>
             </div>
             <TextChecker />
+            
+            <div className="mt-10">
+              <DataAnalysisReport />
+            </div>
             
             <div className="mt-10">
               <DataTableDemo />

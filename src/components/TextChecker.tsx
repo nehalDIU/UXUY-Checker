@@ -1,7 +1,6 @@
 import React from 'react';
 import { useTextChecker } from '../context/TextCheckerContext';
 import { Sparkles, CheckCircle, AlertCircle } from 'lucide-react';
-import CheckResults from './CheckResults';
 
 const TextChecker: React.FC = () => {
   const { 
@@ -68,8 +67,6 @@ const TextChecker: React.FC = () => {
           Analyze Results
         </button>
       </div>
-
-      {isChecked && analysisResults && <CheckResults />}
     </div>
   );
 };

@@ -215,9 +215,6 @@ const findDuplicatePatterns = (addresses: string[]): DuplicateAddressResult[] =>
     
     // Only create a pattern group if we have at least 2 unique addresses
     if (uniqueAddresses.length > 1) {
-      console.log(`Found pattern match: ${patternKey} with ${uniqueAddresses.length} addresses:`);
-      uniqueAddresses.forEach(addr => console.log(`- ${addr}`));
-      
       // Create the display pattern using first 5 and last 4 chars
       const displayPattern = `${patternKey.substring(0, 5)}******${patternKey.substring(patternKey.length - 4)}`;
       
@@ -289,19 +286,15 @@ export const advancedPatternMatch = (addr1: string, addr2: string): boolean => {
   return firstPart1 === firstPart2 && lastPart1 === lastPart2;
 };
 
-// Helper function to check if two addresses match by pattern
+/**
+ * Compares address patterns with the updated rules
+ * Only compares first 5 and last 4 digits of addresses
+ */
 export const addressesMatchByPattern = (addr1: string, addr2: string): boolean => {
-  if (!addr1 || !addr2 || addr1.length < 9 || addr2.length < 9) return false;
+  const pattern1 = getAddressMatchPattern(addr1);
+  const pattern2 = getAddressMatchPattern(addr2);
   
-  // Extract first 5 and last 4 characters from both addresses
-  const firstFive1 = addr1.substring(0, 5).toLowerCase();
-  const lastFour1 = addr1.substring(addr1.length - 4).toLowerCase();
-  
-  const firstFive2 = addr2.substring(0, 5).toLowerCase();
-  const lastFour2 = addr2.substring(addr2.length - 4).toLowerCase();
-  
-  // Compare the extracted parts
-  return firstFive1 === firstFive2 && lastFour1 === lastFour2;
+  return pattern1 === pattern2;
 };
 
 const matchAddresses = (inviteEntries: UXUYEntry[], referrerAddresses: string[]): Map<number, string[]> => {
@@ -364,32 +357,196 @@ const matchAddresses = (inviteEntries: UXUYEntry[], referrerAddresses: string[])
   return amountGroups;
 };
 
-export const analyzeText = (inviteText: string, referrerText: string): AnalysisResults => {
-  // Validate inputs
-  if (!inviteText || !referrerText) {
-    return {
-      totalReferrers: 0,
-      amountGroups: new Map(),
-      duplicates: []
-    };
+// Extended analysis function to provide comprehensive data counts and matching
+export const generateDataAnalysisReport = (
+  inviteEntries: UXUYEntry[], 
+  referrerAddresses: string[]
+): {
+  matchCount: number;
+  mismatchCount: number;
+  duplicates: DuplicateAddressResult[];
+  uxuy0Addresses: string[];
+  uxuy10Addresses: string[];
+  finalAddressCount: {
+    total: number;
+    uxuy10: number;
+    uxuy20: number;
+    uxuy30: number;
   }
+} => {
+  // Find all duplicates in referrer addresses
+  const duplicates = findDuplicatePatterns(referrerAddresses);
   
+  // Create a set of normalized duplicate addresses for faster lookups
+  const duplicateAddressesSet = new Set<string>();
+  // Map to track duplicate count by normalized address
+  const duplicateCountByAddress = new Map<string, number>();
+  
+  duplicates.forEach(duplicate => {
+    if (duplicate.addresses.length === 1) {
+      // For exact duplicates (same address multiple times)
+      const normalizedAddr = normalizeAddress(duplicate.addresses[0]);
+      duplicateAddressesSet.add(normalizedAddr);
+      duplicateCountByAddress.set(normalizedAddr, duplicate.count);
+    } else {
+      // For pattern duplicates (different addresses with same pattern)
+      duplicate.addresses.forEach(address => {
+        const normalizedAddr = normalizeAddress(address);
+        duplicateAddressesSet.add(normalizedAddr);
+        // Each address in the pattern group counts as 1
+        duplicateCountByAddress.set(normalizedAddr, 1);
+      });
+    }
+  });
+  
+  // Group invite entries by amount
+  const inviteByAmount = new Map<number, UXUYEntry[]>();
+  inviteEntries.forEach(entry => {
+    if (!inviteByAmount.has(entry.amount)) {
+      inviteByAmount.set(entry.amount, []);
+    }
+    inviteByAmount.get(entry.amount)?.push(entry);
+  });
+  
+  // Match referrer addresses with invite entries
+  const amountGroups = new Map<number, string[]>();
+  
+  // Initialize amount groups for all possible UXUY values
+  [0, 10, 15, 20, 30, 50].forEach(amount => {
+    amountGroups.set(amount, []);
+  });
+  
+  // Track matched referrer addresses along with their counts
+  const matchedReferrers = new Map<string, number>();
+  
+  // For each referrer address, find matching invite entries
+  referrerAddresses.forEach(referrerAddr => {
+    let matched = false;
+    const normalizedReferrerAddr = normalizeAddress(referrerAddr);
+    
+    // Try to match with each invite entry
+    for (const [amount, entries] of inviteByAmount.entries()) {
+      for (const entry of entries) {
+        if (addressesMatchByPattern(referrerAddr, entry.address)) {
+          amountGroups.get(amount)?.push(referrerAddr);
+          
+          // Count this match - for duplicates, count each occurrence
+          if (duplicateAddressesSet.has(normalizedReferrerAddr)) {
+            // For duplicates, increment by 1 (each duplicate counts)
+            matchedReferrers.set(
+              normalizedReferrerAddr, 
+              (matchedReferrers.get(normalizedReferrerAddr) || 0) + 1
+            );
+          } else {
+            // For non-duplicates, just count once
+            matchedReferrers.set(normalizedReferrerAddr, 1);
+          }
+          
+          matched = true;
+          break;
+        }
+      }
+      if (matched) break;
+    }
+    
+    // If no match was found, add to 0 UXUY group
+    if (!matched) {
+      amountGroups.get(0)?.push(referrerAddr);
+    }
+  });
+  
+  // Count matches - include all duplicates
+  let matchCount = 0;
+  matchedReferrers.forEach((count, normalizedAddr) => {
+    // For duplicates, use the actual duplicate count
+    if (duplicateAddressesSet.has(normalizedAddr)) {
+      matchCount += duplicateCountByAddress.get(normalizedAddr) || 1;
+    } else {
+      // For non-duplicates, count as 1
+      matchCount += 1;
+    }
+  });
+  
+  // Calculate mismatch count using total referrers
+  const mismatchCount = referrerAddresses.length - matchCount;
+  
+  // Extract non-duplicate addresses with specific UXUY values
+  const nonDuplicateAddresses = referrerAddresses.filter(
+    addr => !duplicateAddressesSet.has(normalizeAddress(addr))
+  );
+  
+  // Group non-duplicate addresses by UXUY amount
+  const uxuy0Addresses: string[] = [];
+  const uxuy10Addresses: string[] = [];
+  const uniqueAddressesByAmount = new Map<number, string[]>();
+  
+  [10, 20, 30].forEach(amount => {
+    uniqueAddressesByAmount.set(amount, []);
+  });
+  
+  nonDuplicateAddresses.forEach(address => {
+    let hasAmount = false;
+    
+    // Check if address has a specific UXUY amount
+    for (const [amount, addresses] of amountGroups.entries()) {
+      if (addresses.some(addr => addressesMatchByPattern(addr, address))) {
+        if (amount === 0) {
+          uxuy0Addresses.push(address);
+        } else if (amount === 10) {
+          uxuy10Addresses.push(address);
+          uniqueAddressesByAmount.get(10)?.push(address);
+        } else if (amount === 20) {
+          uniqueAddressesByAmount.get(20)?.push(address);
+        } else if (amount === 30) {
+          uniqueAddressesByAmount.get(30)?.push(address);
+        }
+        hasAmount = true;
+        break;
+      }
+    }
+    
+    // If no amount was found, add to 0 UXUY group
+    if (!hasAmount) {
+      uxuy0Addresses.push(address);
+    }
+  });
+  
+  // Calculate final address count (non-duplicates only)
+  const finalAddressCount = {
+    total: nonDuplicateAddresses.length,
+    uxuy10: uniqueAddressesByAmount.get(10)?.length || 0,
+    uxuy20: uniqueAddressesByAmount.get(20)?.length || 0,
+    uxuy30: uniqueAddressesByAmount.get(30)?.length || 0
+  };
+  
+  return {
+    matchCount,
+    mismatchCount,
+    duplicates,
+    uxuy0Addresses,
+    uxuy10Addresses,
+    finalAddressCount
+  };
+};
+
+export const analyzeText = (inviteText: string, referrerText: string): AnalysisResults => {
   const inviteEntries = parseInviteText(inviteText);
   const referrerAddresses = parseReferrerText(referrerText);
   
   // Match addresses and group by UXUY amount
   const amountGroups = matchAddresses(inviteEntries, referrerAddresses);
   
-  // Find duplicates among all referrer addresses
+  // Find duplicate addresses in referrer list
   const duplicates = findDuplicatePatterns(referrerAddresses);
-
-  // Calculate total input (all addresses including duplicates)
-  const totalReferrers = referrerAddresses.length;
-
+  
+  // Generate comprehensive data analysis report
+  const dataAnalysisReport = generateDataAnalysisReport(inviteEntries, referrerAddresses);
+  
   return {
-    totalReferrers,
+    totalReferrers: referrerAddresses.length,
     amountGroups,
-    duplicates
+    duplicates,
+    dataAnalysisReport // Add the new data analysis report to the results
   };
 };
 

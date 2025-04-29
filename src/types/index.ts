@@ -12,6 +12,19 @@ export interface AnalysisResults {
   totalReferrers: number;
   amountGroups: Map<number, string[]>;
   duplicates: DuplicateAddressResult[];
+  dataAnalysisReport?: {
+    matchCount: number;
+    mismatchCount: number;
+    duplicates: DuplicateAddressResult[];
+    uxuy0Addresses: string[];
+    uxuy10Addresses: string[];
+    finalAddressCount: {
+      total: number;
+      uxuy10: number;
+      uxuy20: number;
+      uxuy30: number;
+    }
+  };
 }
 
 export interface DuplicateAddressResult {
