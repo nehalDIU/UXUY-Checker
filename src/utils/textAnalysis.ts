@@ -1,25 +1,20 @@
 import { UXUYEntry, AnalysisResults, DuplicateAddressResult } from '../types';
 
 /**
- * Masks an Ethereum address to show only first 5 characters after 0x and last 4 characters
- * Example: 0x588******Bb79
+ * Masks an Ethereum address to show only first 5 characters (including 0x) and last 4 characters
+ * Example: 0xE8D******dDd4
  */
 export const maskAddress = (address: string): string => {
-  if (!address || address.length < 11) return address;
+  if (!address || address.length < 9) return address;
   
   // We don't fully normalize here since we want to preserve case for display
-  // but we do trim and handle 0x prefix consistently
   let cleanedAddress = address.trim();
   
-  // Check if address starts with 0x
-  const prefix = cleanedAddress.startsWith('0x') ? '0x' : '';
-  const cleanAddress = cleanedAddress.startsWith('0x') ? cleanedAddress.slice(2) : cleanedAddress;
+  // Get first 5 characters (including 0x if present) and last 4 characters
+  const firstFive = cleanedAddress.slice(0, 5);
+  const lastFour = cleanedAddress.slice(-4);
   
-  // Get first 5 and last 4 characters
-  const firstFive = cleanAddress.slice(0, 5);
-  const lastFour = cleanAddress.slice(-4);
-  
-  return `${prefix}${firstFive}******${lastFour}`;
+  return `${firstFive}******${lastFour}`;
 };
 
 /**
@@ -27,45 +22,119 @@ export const maskAddress = (address: string): string => {
  * - Removes whitespace
  * - Converts to lowercase
  * - Ensures consistent 0x prefix
+ * - Handles malformed addresses
  */
 export const normalizeAddress = (address: string): string => {
   if (!address) return address;
   
+  // Remove all whitespace and convert to lowercase
   let normalized = address.trim().toLowerCase();
   
-  // Add 0x prefix if missing but only if it's an Ethereum address
-  if (!normalized.startsWith('0x') && /^[0-9a-f]{40}$/i.test(normalized)) {
-    normalized = '0x' + normalized;
+  // Extract 0x prefix if present
+  const hasPrefix = normalized.startsWith('0x');
+  const prefix = hasPrefix ? '0x' : '';
+  
+  // Remove non-alphanumeric characters (except for 0x prefix)
+  let cleanAddress = hasPrefix ? normalized.slice(2) : normalized;
+  cleanAddress = cleanAddress.replace(/[^a-f0-9]/gi, '');
+  
+  // Add 0x prefix if missing but only if it has some hex characters
+  if (!hasPrefix && cleanAddress.length > 0) {
+    return '0x' + cleanAddress;
   }
   
-  return normalized;
+  return prefix + cleanAddress;
 };
 
 /**
- * Returns a pattern for address matching using first 5 characters after 0x and last 4 characters
+ * Returns a pattern for address matching using first 5 characters (including 0x) and last 4 characters
  * Used for address comparisons rather than display
+ * 
+ * Handles different address formats:
+ * 1. 0x11E******393F
+ * 2. 0x11E**393F
+ * 3. 0x11E******************393F
+ * 4. 0x11EbhdhG&TfvgbFVVtfBF393F
+ * 5. 0x11EbhdhG&87642TfvgbFVVtfBF393F
  */
 export const getAddressMatchPattern = (address: string): string => {
   // First normalize the address
   const normalized = normalizeAddress(address);
   
-  if (!normalized || normalized.length < 11) return normalized; // Minimum length: 0x + 5 + 4
+  if (!normalized || normalized.length < 9) return normalized; // Minimum length for matching
   
-  // Get prefix and handle addresses with or without 0x
-  const hasPrefix = normalized.startsWith('0x');
-  const prefix = hasPrefix ? '0x' : '';
-  const cleanAddress = hasPrefix ? normalized.slice(2) : normalized;
+  // Get first 5 characters (including 0x) and last 4 characters
+  const firstFive = normalized.slice(0, 5); // This includes "0x" and first 3 chars after 0x
+  const lastFour = normalized.slice(-4);
   
-  // Get first 5 characters after 0x and last 4 characters
-  const firstFive = cleanAddress.slice(0, 5);
-  const lastFour = cleanAddress.slice(-4);
-  
-  return `${prefix}${firstFive}${lastFour}`;
+  // Return pattern that concatenates first 5 chars and last 4 chars directly
+  return `${firstFive}${lastFour}`;
 };
 
+/**
+ * Enhanced pattern matching is now removed in favor of the more consistent getAddressMatchPattern
+ * This function is deprecated but kept for backward compatibility
+ */
+export const getAddressFullPattern = (address: string): string => {
+  // Now we just delegate to the more robust getAddressMatchPattern
+  return getAddressMatchPattern(address);
+};
+
+/**
+ * Checks if the address matches a pattern like the ones specified in requirements
+ * 1. 0x11E******393F
+ * 2. 0x11E**393F
+ * 3. 0x11E******************393F
+ * 4. 0x11EbhdhG&TfvgbFVVtfBF393F
+ * 5. 0x11EbhdhG&87642TfvgbFVVtfBF393F
+ */
+export const isPatternAddress = (address: string): boolean => {
+  // Remove whitespace
+  const cleaned = address.trim();
+  
+  // Check if it has 0x prefix
+  if (!cleaned.startsWith('0x')) return false;
+  
+  // Check if it has wildcards or special characters
+  return cleaned.includes('*') || 
+         cleaned.includes('&') || 
+         /^0x[a-f0-9]{3}.*[a-f0-9]{4}$/i.test(cleaned);
+};
+
+/**
+ * Advanced pattern matching that handles various masked address formats
+ * This extracts the first 5 chars and last 4 chars for comparison
+ */
+export const extractPatternParts = (address: string): { firstPart: string, lastPart: string } | null => {
+  // Handle null/undefined input
+  if (!address) return null;
+  
+  // Clean up the address
+  const cleaned = address.trim();
+  
+  // Check if it's a potentially valid address (starts with 0x and has reasonable length)
+  if (!cleaned.startsWith('0x') || cleaned.length < 9) {
+    return null;
+  }
+  
+  // Extract the important parts
+  const firstPart = cleaned.slice(0, 5);
+  const lastPart = cleaned.slice(-4);
+  
+  return { firstPart, lastPart };
+};
+
+/**
+ * Finds duplicate patterns in the list of addresses based on the first 5 and last 4 characters
+ */
 const findDuplicatePatterns = (addresses: string[]): DuplicateAddressResult[] => {
+  // Filter out invalid addresses first
+  const validAddresses = addresses.filter(address => 
+    address && address.trim().startsWith('0x') && address.trim().length >= 9
+  );
+  
   // First, normalize all addresses
-  const normalizedAddresses = addresses.map(normalizeAddress);
+  const normalizedAddresses = validAddresses.map(normalizeAddress);
   
   // Count occurrences of each normalized address
   const addressCount = new Map<string, number>();
@@ -73,43 +142,90 @@ const findDuplicatePatterns = (addresses: string[]): DuplicateAddressResult[] =>
     addressCount.set(address, (addressCount.get(address) || 0) + 1);
   });
 
-  // Group addresses by pattern for similar address detection
-  const patternMap = new Map<string, string[]>();
-  normalizedAddresses.forEach((address, i) => {
-    const pattern = getAddressMatchPattern(address);
-    if (!patternMap.has(pattern)) {
-      patternMap.set(pattern, []);
+  // Create a map of normalized address to original address for reference
+  const normalizedToOriginal = new Map<string, string[]>();
+  validAddresses.forEach((addr, i) => {
+    const normalized = normalizeAddress(addr);
+    if (!normalizedToOriginal.has(normalized)) {
+      normalizedToOriginal.set(normalized, []);
     }
-    // Use original address for display
-    patternMap.get(pattern)?.push(addresses[i]);
+    normalizedToOriginal.get(normalized)?.push(addr);
+  });
+
+  // Group addresses by pattern (first 5 chars + last 4 chars)
+  const patternMap = new Map<string, string[]>();
+  validAddresses.forEach((address) => {
+    if (!address.trim()) return;
+    
+    // Extract first 5 and last 4 characters
+    const firstFive = address.substring(0, 5).toLowerCase();
+    const lastFour = address.substring(address.length - 4).toLowerCase();
+    const pattern = `${firstFive}${lastFour}`;
+    
+    // Only process valid patterns
+    if (pattern && pattern.length >= 9) {
+      if (!patternMap.has(pattern)) {
+        patternMap.set(pattern, []);
+      }
+      // Use original address for display
+      patternMap.get(pattern)?.push(address);
+    }
   });
 
   const duplicates: DuplicateAddressResult[] = [];
-
-  // Add duplicate exact addresses (showing only one instance with count)
+  
+  // Process exact duplicates first
+  const processedExactDuplicates = new Set<string>();
   addressCount.forEach((count, normalizedAddress) => {
     if (count > 1) {
       // Find original addresses that normalize to this value
-      const originalAddresses = normalizedAddresses
-        .map((addr, i) => addr === normalizedAddress ? addresses[i] : null)
-        .filter(Boolean) as string[];
+      const originalAddresses = normalizedToOriginal.get(normalizedAddress) || [];
       
-      duplicates.push({
-        pattern: normalizedAddress,
-        addresses: [originalAddresses[0]], // Only include one instance
-        count // Add count information
-      });
+      if (originalAddresses.length > 0) {
+        duplicates.push({
+          pattern: maskAddress(normalizedAddress),
+          addresses: [originalAddresses[0]], // Only include one instance
+          count, // Add count information
+          isExactDuplicate: true // Mark as exact duplicate
+        });
+        
+        // Mark this normalized address as processed
+        processedExactDuplicates.add(normalizedAddress);
+      }
     }
   });
 
-  // Add similar addresses (different addresses with same pattern)
-  patternMap.forEach((addrs, pattern) => {
-    const uniqueAddresses = [...new Set(addrs)];
+  // Now handle pattern matches - these are also treated as exact duplicates
+  patternMap.forEach((addrs, patternKey) => {
+    // Skip patterns with only one address
+    if (addrs.length <= 1) return;
+    
+    // Collect unique addresses for this pattern (by normalized form)
+    const uniqueAddressesByNormalized = new Map<string, string>();
+    
+    addrs.forEach(addr => {
+      const normalized = normalizeAddress(addr);
+      // Only include if not already an exact duplicate
+      if (!processedExactDuplicates.has(normalized) && !uniqueAddressesByNormalized.has(normalized)) {
+        uniqueAddressesByNormalized.set(normalized, addr);
+      }
+    });
+    
+    const uniqueAddresses = Array.from(uniqueAddressesByNormalized.values());
+    
+    // Only create a pattern group if we have at least 2 unique addresses
     if (uniqueAddresses.length > 1) {
+      console.log(`Found pattern match: ${patternKey} with ${uniqueAddresses.length} addresses:`);
+      uniqueAddresses.forEach(addr => console.log(`- ${addr}`));
+      
+      // Create the display pattern using first 5 and last 4 chars
+      const displayPattern = `${patternKey.substring(0, 5)}******${patternKey.substring(patternKey.length - 4)}`;
+      
       duplicates.push({
-        pattern,
+        pattern: displayPattern,
         addresses: uniqueAddresses,
-        count: uniqueAddresses.length
+        count: uniqueAddresses.length,
+        isExactDuplicate: true // Mark as exact duplicate
       });
     }
   });
@@ -117,42 +233,131 @@ const findDuplicatePatterns = (addresses: string[]): DuplicateAddressResult[] =>
   return duplicates;
 };
 
+/**
+ * Compares two address patterns for an exact match
+ * Handles edge cases and ignores case sensitivity
+ */
+const patternsMatch = (pattern1: string, pattern2: string): boolean => {
+  if (!pattern1 || !pattern2) return false;
+  
+  // Normalize both patterns before comparing
+  pattern1 = normalizeAddress(pattern1);
+  pattern2 = normalizeAddress(pattern2);
+  
+  // Compare patterns - both should already be normalized
+  const match = pattern1 === pattern2;
+  
+  if (match) {
+    console.log(`Pattern match found! ${pattern1} = ${pattern2}`);
+  }
+  
+  return match;
+};
+
+/**
+ * Advanced pattern matching that handles different formats:
+ * 1. 0x11E******393F
+ * 2. 0x11E**393F
+ * 3. 0x11E******************393F
+ * 4. 0x11EbhdhG&TfvgbFVVtfBF393F
+ * 5. 0x11EbhdhG&87642TfvgbFVVtfBF393F
+ */
+export const advancedPatternMatch = (addr1: string, addr2: string): boolean => {
+  // Handle empty inputs
+  if (!addr1 || !addr2) return false;
+  
+  // Extract pattern parts
+  const parts1 = extractPatternParts(addr1);
+  const parts2 = extractPatternParts(addr2);
+  
+  // If either pattern couldn't be extracted, fall back to basic pattern comparison
+  // IMPORTANT: Don't call addressesMatchByPattern here to avoid infinite recursion
+  if (!parts1 || !parts2) {
+    // Use direct pattern comparison instead
+    const pattern1 = getAddressMatchPattern(addr1);
+    const pattern2 = getAddressMatchPattern(addr2);
+    return pattern1 === pattern2 && pattern1 !== '';
+  }
+  
+  // Convert to lowercase for case-insensitive comparison
+  const firstPart1 = parts1.firstPart.toLowerCase();
+  const lastPart1 = parts1.lastPart.toLowerCase();
+  const firstPart2 = parts2.firstPart.toLowerCase();
+  const lastPart2 = parts2.lastPart.toLowerCase();
+  
+  // Match based on first 5 chars and last 4 chars
+  return firstPart1 === firstPart2 && lastPart1 === lastPart2;
+};
+
+// Helper function to check if two addresses match by pattern
+export const addressesMatchByPattern = (addr1: string, addr2: string): boolean => {
+  if (!addr1 || !addr2 || addr1.length < 9 || addr2.length < 9) return false;
+  
+  // Extract first 5 and last 4 characters from both addresses
+  const firstFive1 = addr1.substring(0, 5).toLowerCase();
+  const lastFour1 = addr1.substring(addr1.length - 4).toLowerCase();
+  
+  const firstFive2 = addr2.substring(0, 5).toLowerCase();
+  const lastFour2 = addr2.substring(addr2.length - 4).toLowerCase();
+  
+  // Compare the extracted parts
+  return firstFive1 === firstFive2 && lastFour1 === lastFour2;
+};
+
 const matchAddresses = (inviteEntries: UXUYEntry[], referrerAddresses: string[]): Map<number, string[]> => {
   const amountGroups = new Map<number, string[]>();
   
-  // Create maps to store address patterns for matching
-  const referrerPatterns = new Map<string, string>();
-  const referrerCount = new Map<string, number>();
-  
-  // Normalize referrer addresses for consistent matching
-  const normalizedReferrerAddresses = referrerAddresses.map(normalizeAddress);
-  
-  // Process referrer addresses and store their patterns
-  normalizedReferrerAddresses.forEach((normalizedAddress, i) => {
-    const pattern = getAddressMatchPattern(normalizedAddress);
-    referrerPatterns.set(pattern, referrerAddresses[i]); // Store original address
-    // Count by pattern instead of exact address
-    referrerCount.set(pattern, (referrerCount.get(pattern) || 0) + 1);
+  // Initialize standard UXUY amounts including 0
+  [0, 10, 15, 20, 30, 50].forEach(amount => {
+    amountGroups.set(amount, []);
   });
   
+  // Filter out invalid addresses before processing
+  const validReferrerAddresses = referrerAddresses.filter(address => 
+    address && address.trim().startsWith('0x') && address.trim().length >= 9
+  );
+  
+  // Process each invite entry
   inviteEntries.forEach(entry => {
-    // Normalize the entry address before matching
-    const normalizedEntryAddress = normalizeAddress(entry.address);
-    const entryPattern = getAddressMatchPattern(normalizedEntryAddress);
+    if (!entry.address || !entry.address.trim()) return;
     
-    // Check if any referrer address matches this pattern
-    const matchFound = referrerPatterns.has(entryPattern);
+    // Extract first 5 and last 4 characters for matching
+    const inviteFirstFive = entry.address.substring(0, 5).toLowerCase();
+    const inviteLastFour = entry.address.substring(entry.address.length - 4).toLowerCase();
     
-    if (matchFound) {
-      // Use the original address from entry for consistency
-      if (!amountGroups.has(entry.amount)) {
-        amountGroups.set(entry.amount, []);
-      }
+    console.log(`Checking invite: ${entry.address} with pattern ${inviteFirstFive}...${inviteLastFour}`);
+    
+    let matchCount = 0;
+    
+    // Try to match each referrer address against this invite pattern
+    validReferrerAddresses.forEach(referrerAddress => {
+      if (referrerAddress.length < 9) return;
       
-      // Add the address only once
-      if (!amountGroups.get(entry.amount)?.includes(entry.address)) {
-        amountGroups.get(entry.amount)?.push(entry.address);
+      const referrerFirstFive = referrerAddress.substring(0, 5).toLowerCase();
+      const referrerLastFour = referrerAddress.substring(referrerAddress.length - 4).toLowerCase();
+      
+      // Check for match on first 5 and last 4 characters
+      if (inviteFirstFive === referrerFirstFive && inviteLastFour === referrerLastFour) {
+        console.log(`Pattern match! Invite ${entry.address} matches referrer ${referrerAddress}`);
+        
+        matchCount++;
+        
+        // Ensure amount group exists
+        if (!amountGroups.has(entry.amount)) {
+          amountGroups.set(entry.amount, []);
+        }
+        
+        // Add this referrer address to the amount group
+        if (!amountGroups.get(entry.amount)?.includes(referrerAddress)) {
+          amountGroups.get(entry.amount)?.push(referrerAddress);
+        }
       }
+    });
+    
+    if (matchCount === 0) {
+      console.log(`No matches found for invite ${entry.address}`);
+    } else {
+      console.log(`Found ${matchCount} pattern matches for invite ${entry.address}`);
     }
   });
 
@@ -160,6 +365,15 @@ const matchAddresses = (inviteEntries: UXUYEntry[], referrerAddresses: string[])
 };
 
 export const analyzeText = (inviteText: string, referrerText: string): AnalysisResults => {
+  // Validate inputs
+  if (!inviteText || !referrerText) {
+    return {
+      totalReferrers: 0,
+      amountGroups: new Map(),
+      duplicates: []
+    };
+  }
+  
   const inviteEntries = parseInviteText(inviteText);
   const referrerAddresses = parseReferrerText(referrerText);
   

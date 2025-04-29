@@ -58,21 +58,45 @@ export const TextCheckerProvider: React.FC<{ children: ReactNode }> = ({ childre
       }
     });
     
-    // Count matched addresses (only count duplicates once)
+    // Track which patterns we've already counted to avoid duplicate counting
+    const countedPatterns = new Set<string>();
+    
+    // Count matched addresses (count duplicates multiple times)
     Array.from(analysisResults.amountGroups.entries()).forEach(([_, addresses]) => {
       addresses.forEach(address => {
-        totalMatched += 1; // Each address counts as one match
+        // Check if this is an exact duplicate
+        const exactDuplicate = analysisResults.duplicates.find(dup => 
+          dup.addresses.length === 1 && dup.addresses[0] === address
+        );
+        
+        if (exactDuplicate) {
+          // Count exact duplicates multiple times
+          totalMatched += exactDuplicate.count;
+        } else {
+          // Check if it's a different format of same pattern
+          const patternDuplicate = analysisResults.duplicates.find(dup => 
+            dup.addresses.length > 1 && dup.addresses.includes(address)
+          );
+          
+          if (patternDuplicate) {
+            // Count each address individually instead of just once per pattern
+            totalMatched += 1;
+          } else {
+            // Count non-duplicates once
+            totalMatched += 1;
+          }
+        }
       });
     });
     
-    // Calculate mismatch
-    const totalMismatch = uniqueReferrersCount - totalMatched;
+    // Calculate mismatch using total referrers instead of unique count
+    const totalMismatch = analysisResults.totalReferrers - totalMatched;
     
     // Add summary section
     formattedResults += '=== Summary ===\n';
     formattedResults += `Total Referrers: ${analysisResults.totalReferrers} (${uniqueReferrersCount} unique)\n`;
-    formattedResults += `Matched: ${totalMatched}\n`;
-    formattedResults += `Mismatch (No Dupes): ${totalMismatch}\n\n`;
+    formattedResults += `Matched (Incl. Dupes): ${totalMatched}\n`;
+    formattedResults += `Mismatch: ${totalMismatch}\n\n`;
     
     // Add duplicate addresses first
     if (analysisResults.duplicates.length > 0) {
@@ -116,7 +140,7 @@ export const TextCheckerProvider: React.FC<{ children: ReactNode }> = ({ childre
     const duplicateAddresses = new Set<string>();
     analysisResults.duplicates.forEach(duplicate => {
       duplicate.addresses.forEach(address => {
-        duplicateAddresses.add(address);
+        duplicateAddresses.add(normalizeAddress(address));
       });
     });
     
@@ -126,7 +150,7 @@ export const TextCheckerProvider: React.FC<{ children: ReactNode }> = ({ childre
       .filter(([amount]) => amount > 0)
       .forEach(([amount, addresses]) => {
         addresses.forEach(address => {
-          if (!duplicateAddresses.has(address)) {
+          if (!duplicateAddresses.has(normalizeAddress(address))) {
             uniqueAddressesWithNonZeroUXUY.add(address);
           }
         });

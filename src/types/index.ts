@@ -18,6 +18,7 @@ export interface DuplicateAddressResult {
   addresses: string[];
   pattern: string;
   count: number;
+  isExactDuplicate?: boolean;
 }
 
-export type UXUYAmount = 10 | 15 | 20 | 30 | 50;
+export type UXUYAmount = 0 | 10 | 15 | 20 | 30 | 50;
